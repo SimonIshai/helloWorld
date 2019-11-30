@@ -11,152 +11,182 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Jeffail/gabs"
+	gabs "github.com/Jeffail/gabs/v2"
 	"github.com/SimonIshai/helloWorld/errors"
+	"github.com/SimonIshai/helloWorld/model"
 )
 
-func Run(testCases TestCases) error {
-	for i := range testCases {
-		err := runCase(&testCases[i])
-		if err != nil {
-			log.Printf("TestCase %d, err: %s\n", testCases[i].ID, err)
-		}
-	}
-	return nil
-}
+var urlGraphAPI = "https://graph.microsoft.com/v1.0/" //users/01242674-b1d8-473d-8558-fe9e043eebcc/"
+var bearerToken = `eyJ0eXAiOiJKV1QiLCJub25jZSI6IjRpS2h3MjFySDVHOG51c2V5Tm9JN0VyNnlmb19jcFJneTU2ZlUxY3VsRzQiLCJhbGciOiJSUzI1NiIsIng1dCI6IkJCOENlRlZxeWFHckdOdWVoSklpTDRkZmp6dyIsImtpZCI6IkJCOENlRlZxeWFHckdOdWVoSklpTDRkZmp6dyJ9.eyJhdWQiOiJodHRwczovL2dyYXBoLm1pY3Jvc29mdC5jb20iLCJpc3MiOiJodHRwczovL3N0cy53aW5kb3dzLm5ldC9jM2M5ZGFiZS0xZjg4LTQwOTgtOGIzYS04NTBhNzQyZGI3NmEvIiwiaWF0IjoxNTc0OTU0OTM2LCJuYmYiOjE1NzQ5NTQ5MzYsImV4cCI6MTU3NDk1ODgzNiwiYWlvIjoiNDJWZ1lDaU9GTERTTFBhZWVOemd1b09YOHBsZkFBPT0iLCJhcHBfZGlzcGxheW5hbWUiOiJhd3NldS1hcG9sbG8tZGV2IiwiYXBwaWQiOiJiMzcyYWEzYy05ZWFjLTQ4MmUtOTRmZi04MzZjNDNlYTIxM2YiLCJhcHBpZGFjciI6IjEiLCJpZHAiOiJodHRwczovL3N0cy53aW5kb3dzLm5ldC9jM2M5ZGFiZS0xZjg4LTQwOTgtOGIzYS04NTBhNzQyZGI3NmEvIiwib2lkIjoiNTllYzBiZmMtOGJlMi00ZmViLTgyNjMtNmRhNGI1Y2FhNGFhIiwicm9sZXMiOlsiTWFpbC5SZWFkV3JpdGUiLCJHcm91cC5SZWFkLkFsbCIsIlVzZXIuUmVhZC5BbGwiLCJNYWlsLlNlbmQiXSwic3ViIjoiNTllYzBiZmMtOGJlMi00ZmViLTgyNjMtNmRhNGI1Y2FhNGFhIiwidGlkIjoiYzNjOWRhYmUtMWY4OC00MDk4LThiM2EtODUwYTc0MmRiNzZhIiwidXRpIjoiOEs3RjZpWXVoa3V3UlV0V1lPRFFBQSIsInZlciI6IjEuMCIsInhtc190Y2R0IjoxNTcwNDU0MTQ4fQ.jWtOJvt7Mu6WkmVqfQq72ZQpxCk1ZPbkCVw4yu2IgBFFSVXYrpX52Ul-FBAavzYDVt1HYplIQ_1iUBZsNtmkIQLn9g5B4B8oKe6cmJ2t6gpbrNtPaConuqRkddVEZIxtLh6INu-z4zIMvzDBEqESU6uXOjWujktspALJBj9jBKXgNc6y8R5vYgmEodYVfRnQtIWL0SOl88jakXmybxXz4Bcw_Q00RAAm147wAw7u5cZWp9QnLbgaaRHvOYdvxhGRZKPmeSNnrQYsWmgF36djhvzT2TwFXDkZkJ61mOczmzeNlhq0p8dfNaD_WIR-A-j3lfDuh_ANzeFAZs7AvphD1w`
+var client = &http.Client{Timeout: 60 * time.Second}
 
-func runCase(testCase *TestCase) error {
+func Run(testCases []model.TestCase) error {
 
-	chanSize := testCase.NumOfRepeats
-	ch := make(chan struct{}, chanSize+1)
-	for i := 0; i < chanSize; i++ {
-		ch <- struct{}{}
-	}
-	close(ch)
+	testCasesNum := len(testCases)
 	var wg sync.WaitGroup
-	wg.Add(testCase.NumOfConcurrentWorkers)
-	for i := 0; i < testCase.NumOfConcurrentWorkers; i++ {
-		go func() {
+	wg.Add(testCasesNum)
+	for i := range testCases {
+
+		go func(caseIndex int) {
 			defer wg.Done()
 
-			for range ch {
-				resp, err := sendRequest(testCase)
-				if err != nil {
-					log.Println("runCase worker err:", errors.Wrap(err, errors.KindHttp, "send request"))
-					return
-				}
-
-				err = processResponse(testCase, resp)
-				if err != nil {
-					log.Println("runCase worker err:", errors.Wrap(err, errors.KindHttp, "process response"))
-					return
-				}
+			err := runTestCase(&testCases[caseIndex])
+			if err != nil {
+				log.Printf("TestCase %d, err: %s\n", testCases[caseIndex].ID, err)
 			}
-
-		}()
+		}(i)
 	}
 	wg.Wait()
 	return nil
 }
 
-func sendRequest(testCase *TestCase) ([]byte, error) {
+func runTestCase(testCase *model.TestCase) error {
+
+	chanSize := testCase.NumOfRepetitions
+	ch := make(chan int, chanSize+1)
+	for i := 1; i <= chanSize; i++ {
+		ch <- i
+	}
+	close(ch)
+	log.Println("run CaseID", testCase.ID, "NumOfConcurrentWorkers", testCase.NumOfConcurrentWorkers)
+	var wg sync.WaitGroup
+	wg.Add(testCase.NumOfConcurrentWorkers)
+	for i := 1; i <= testCase.NumOfConcurrentWorkers; i++ {
+		go func(workerID int) {
+			defer wg.Done()
+
+			for repetition := range ch {
+
+				log.Println("CaseID", testCase.ID, "worker", workerID, ", repetition", repetition)
+
+				err := runRepetition(testCase, workerID, repetition)
+				if err != nil {
+					log.Println(errors.Wrap(errors.Wrap(err, "runRepetition"), "case run").Error())
+					return
+				}
+			}
+
+		}(i)
+	}
+	wg.Wait()
+	return nil
+}
+
+func runRepetition(testCase *model.TestCase, workerID, repetition int) error {
 
 	var url string
 	var method string
+	var body []byte
 	var err error
-	var bodyReader *bytes.Reader
-	var message string
+
 	if testCase.IsBatch {
+		testCase.BatchRequest = model.GenerateBatch(testCase.NumOfRequestsInBatch)
 		method = testCase.BatchRequest.Method
-		url = urlAPI + testCase.BatchRequest.URL
-		body, err := json.MarshalIndent(testCase.BatchRequest.Body, "", "\t")
+		url = urlGraphAPI + testCase.BatchRequest.URL
+		body, err = json.MarshalIndent(testCase.BatchRequest.Body, "", "\t")
 		if err != nil {
-			return nil, errors.Wrap(err, errors.KindParse, "json marshal")
+			return errors.WrapWithKind(err, errors.KindParse, "json marshal")
 		}
-		message += method + ": " + url + "\n" + string(body) + "\n"
-		bodyReader = bytes.NewReader(body)
 
 	} else {
-		url = urlAPI + testCase.Request.URL
+		url = urlGraphAPI + testCase.Request.URL
 		method = testCase.Request.Method
 		if testCase.Request.Body != "" {
-			bodyReader = bytes.NewReader([]byte(testCase.Request.Body))
-		}
-		message += method + ": " + url + "\n" + testCase.Request.Body + "\n"
-	}
-	testCase.RequestMsg = message
-
-	req, err := http.NewRequest(method, url, bodyReader)
-	if err != nil {
-		return nil, errors.Wrap(err, errors.KindHttp, "NewRequest")
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", bearerToken))
-
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, errors.Wrap(err, errors.KindHttp, "client.Do")
-	}
-	defer resp.Body.Close() //nolint: errcheck
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.Wrap(err, errors.KindHttp, "read response body")
-	}
-
-	return respBody, nil
-}
-
-func processResponse(testCase *TestCase, resp []byte) error {
-
-	testCase.ResponseMsg = string(resp)
-
-	//filename := time.Now().Format("2006-01-02T15:04") + ".json"
-	//if err := storeToFile(resp, filename); err != nil {
-	//	return errors.Wrap(err, errors.KindFileSystem, "store response to file")
-	//}
-
-	container, err := gabs.ParseJSON(resp)
-	if err != nil {
-		return errors.Wrap(err, errors.KindParse, "parse response to json")
-	}
-
-	statusOKPath := "status"
-	if elem := container.Path(statusOKPath); elem != nil {
-		httpStatus := elem.Data().(int)
-		if httpStatus != http.StatusOK {
-
+			body = []byte(testCase.Request.Body)
 		}
 	}
+	requestMsg := method + ": " + url + "\n" + string(body) + "\n"
+
+	respBody, err := sendRequest(method, url, body)
+	if err != nil {
+		return errors.Wrap(err, "send request to graph api")
+	}
+	responseMsg := string(respBody)
+
+	jsonParsed, err := gabs.ParseJSON(respBody)
+	if err != nil {
+		return errors.WrapWithKind(err, errors.KindParse, "parse response to json")
+	}
+
+	timestamp := time.Now().Format("2006-01-02T15:04")
 
 	errPath := "error"
-	//errCodePath := "error.code"
-	//errMessagePath := "error.message"
+	if jsonParsed.Exists(errPath) {
 
-	if elem := container.Path(errPath); elem != nil {
+		filename := fmt.Sprintf("%s_CaseID_%d_repetition_%d_worker_%d_error.json", timestamp, testCase.ID, repetition, workerID)
+		if err := storeToFile([]byte(testCase.Log(repetition, workerID, requestMsg, responseMsg)), filename); err != nil {
+			return errors.Wrap(err, "store response to file")
+		}
+		return errors.New(errors.KindGraphAPI, "got error message")
+	}
 
-		timestamp := time.Now().Format("2006-01-02T15:04")
-		filename := fmt.Sprintf("%s_CaseID_%d_error.json", timestamp, testCase.ID)
+	responsesPath := "responses"
+	if jsonParsed.Exists(responsesPath) {
 
-		if err := storeToFile([]byte(testCase.String()), filename); err != nil {
-			return errors.Wrap(err, errors.KindFileSystem, "store response to file")
+		for _, child := range jsonParsed.S(responsesPath).Children() {
+
+			if child.ExistsP("body.error") {
+
+				filename := fmt.Sprintf("%s_CaseID_%d_repetition_%d_worker_%d_error.json", timestamp, testCase.ID, repetition, workerID)
+				if err := storeToFile([]byte(testCase.Log(repetition, workerID, requestMsg, responseMsg)), filename); err != nil {
+					return errors.Wrap(err, "store response to file")
+				}
+				return errors.New(errors.KindGraphAPI, "got error message")
+			}
 		}
 	}
 
 	return nil
 }
 
+func sendRequest(method, url string, body []byte) ([]byte, error) {
+
+	var bodyReader *bytes.Reader
+	if body != nil {
+		bodyReader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequest(method, url, bodyReader)
+	if err != nil {
+		return nil, errors.WrapWithKind(err, errors.KindHttp, "NewRequest")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", bearerToken))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, errors.WrapWithKind(err, errors.KindHttp, "client.Do")
+	}
+	defer resp.Body.Close() //nolint: errcheck
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.WrapWithKind(err, errors.KindHttp, "read response body")
+	}
+	return respBody, nil
+}
+
 func storeToFile(bytesToStore []byte, filename string) error {
+
+	logFolder := "test-case-logs"
+	_, err := os.Stat(logFolder)
+	if os.IsNotExist(err) {
+		errDir := os.MkdirAll(logFolder, os.ModePerm)
+		if errDir != nil {
+			return errors.WrapWithKind(err, errors.KindFileSystem, "create logs folder")
+		}
+	}
+
+	filename = logFolder + "/" + filename
 	f, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
-		return errors.Wrap(err, errors.KindFileSystem, "open file")
+		return errors.WrapWithKind(err, errors.KindFileSystem, "open file")
 	}
 
 	defer f.Close()
 	bytesToStore = append(bytesToStore, []byte("\n")...)
 	if _, err = f.Write(bytesToStore); err != nil {
-		return errors.Wrap(err, errors.KindFileSystem, "file write")
+		return errors.WrapWithKind(err, errors.KindFileSystem, "file write")
 	}
 	return nil
 }

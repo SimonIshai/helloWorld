@@ -1,0 +1,15 @@
+settings:
+  log_folder: "/Users/sishai/data/my_code/helloWorld/runner/logs"
+  tenant_id: "c3c9dabe-1f88-4098-8b3a-850a742db76a"
+
+test_cases:
+  - id: 1
+    randomize: true
+    is_batch: true
+    concurrent_workers: 100
+    repetitions: 300
+    requests_in_batch: 4
+    request:
+      method: "GET"
+      url: "users/user1@sishaicyren.onmicrosoft.com/messages/AAMkAGY2NjI5NzU0LTQxYjktNGQ5My1hODY0LWYxNmM1Zjg1ZDNmZQBGAAAAAAANsx3zYZWoRbgJTxzNLUUrBwBKgViXObVQRKVrwdIXxyCeAAAAAAEMAABKgViXObVQRKVrwdIXxyCeAAARuI43AAA\u003d"
+
