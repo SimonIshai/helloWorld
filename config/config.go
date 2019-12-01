@@ -2,7 +2,6 @@ package config
 
 import (
 	"io/ioutil"
-	"log"
 
 	"github.com/SimonIshai/helloWorld/model"
 
@@ -26,7 +25,7 @@ func Init(filePath string) (*Config, error) {
 		return nil, errors.WrapWithKind(err, errors.KindFileSystem, "read file")
 
 	} else {
-		log.Println("config", string(data))
+		//log.Println("config", string(data))
 		cfg = &Config{}
 
 		if err := yaml.Unmarshal(data, cfg); err != nil {

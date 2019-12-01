@@ -4,10 +4,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/SimonIshai/helloWorld/errors"
-
 	"github.com/SimonIshai/helloWorld/config"
-
+	"github.com/SimonIshai/helloWorld/errors"
 	"github.com/SimonIshai/helloWorld/runner"
 )
 
@@ -17,10 +15,8 @@ func main() {
 	//testCases := runner.GetTestCases_MaxParallelBatches()
 	//testCases := runner.GetTestCases_MaxNumOfRequestsInBatch()
 	cfg, err := config.Init("config.yaml")
-	//cfg, err := config.GetConfig()
 	if err != nil {
-		err = errors.Wrap(err, "GetConfig")
-		log.Println(err)
+		log.Println(errors.Wrap(err, "GetConfig"))
 		return
 	}
 

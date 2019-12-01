@@ -8,15 +8,16 @@ import (
 //type TestCases []TestCase
 
 type TestCase struct {
-	ID                     int          `yaml:"id"`
-	Randomize              bool         `yaml:"randomize"`
-	Request                Request      `yaml:"request"`
-	BatchRequest           BatchRequest `yaml:"batch_request"`
+	ID                     int          `json:"case_id",yaml:"id"`
+	Randomize              bool         `json:"-",yaml:"randomize"`
+	Request                Request      `json:"-",yaml:"request"`
+	BatchRequest           BatchRequest `json:"-",yaml:"batch_request"`
 	NumOfConcurrentWorkers int          `yaml:"concurrent_workers"`
 	NumOfRepetitions       int          `yaml:"repetitions"`
 	NumOfRequestsInBatch   int          `yaml:"requests_in_batch"`
 	IsBatch                bool         `yaml:"is_batch"`
-	client                 *http.Client
+	client                 *http.Client `json:"-"`
+	Statistics             Statistics
 }
 
 func (t *TestCase) Log(repetition, workerID int, request, response string) string {
